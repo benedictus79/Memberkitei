@@ -38,7 +38,6 @@ def extract_lesson_details(section, section_folder):
 
 def find_and_download_video(lesson_link, lesson_folder, lesson_title):
   response_lesson = vazandigitalsession.get(lesson_link)
-  referer_url = response_lesson.url
   soup = BeautifulSoup(response_lesson.text, 'html.parser')
   target_div = soup.find('div', class_="aspect-h-9 aspect-w-16 relative z-20")
   if target_div:
@@ -46,12 +45,13 @@ def find_and_download_video(lesson_link, lesson_folder, lesson_title):
     if video_url:
       video_url = format_url(video_url)
       output_path = shorten_folder_name(os.path.join(lesson_folder, f'{clear_folder_name(lesson_title)}.mp4'))
-      download_video(video_url, output_path, referer_url)
+      download_video(video_url, output_path, response_lesson)
       
 
 def process_lessons(lessons):
-  for lesson, lesson_info in lessons.items():
-    find_and_download_video(lesson_info['url'], lesson_info['path'], lesson)
+  if lessons:
+    for lesson, lesson_info in lessons.items():
+      find_and_download_video(lesson_info['url'], lesson_info['path'], lesson)
 
 
 def list_sections(course_name, course_link):

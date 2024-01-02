@@ -69,6 +69,8 @@ class SilentLogger(object):
 
   def warning(self, msg):
     log_error(msg)
+    pass
 
   def error(self, msg):
     log_error(msg)
+    pass
