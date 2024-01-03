@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from login import vazandigitalsession, selected_course, BeautifulSoup
-from utils import format_url, os, clear_folder_name, create_folder, shorten_folder_name
+from utils import format_url, generate_file_name, log_error, os, clear_folder_name, create_folder, save_file, save_html, shorten_folder_name
 from download import download_video
 from tqdm import tqdm
 
@@ -36,16 +36,45 @@ def extract_lesson_details(section, section_folder):
   return lessons_details
 
 
+def lesson_material(soup, lesson_folder):
+  target_a = soup.find_all('a', class_="attachment")
+  
+  if target_a:
+    for i, target_div in enumerate(target_a, start=1):
+      material_href = target_div.get('href')
+      response = vazandigitalsession.get(f'https://vazan-conteudo-digital.memberkit.com.br{material_href}')
+      if response.status_code != 200:
+        msg_warning = f"Erro ao acessar {material_href}: Status Code {response.status_code}"
+        log_error(msg_warning)
+        return
+      file_name = generate_file_name(response.url, response.headers)
+      material_folder = create_folder(os.path.join(lesson_folder, 'material'))
+      file_path = os.path.join(material_folder, f'{i:03d} - {clear_folder_name(file_name)}')
+      save_file(file_path, response)
+
+def lesson_text(soup, lesson_folder, lesson_title):
+  target_div = soup.find('div', class_='mx-auto max-w-screen-xl px-4 pb-4 md:px-8 md:pb-8')
+
+  if target_div:
+    content = target_div.find('div', class_='lg:col-span-2')
+    save_html(content, lesson_folder, lesson_title)
+
+
 def find_and_download_video(lesson_link, lesson_folder, lesson_title):
   response_lesson = vazandigitalsession.get(lesson_link)
   soup = BeautifulSoup(response_lesson.text, 'html.parser')
   target_div = soup.find('div', class_="aspect-h-9 aspect-w-16 relative z-20")
+
   if target_div:
     video_url = target_div.get('data-panda-player-url-value')
     if video_url:
       video_url = format_url(video_url)
       output_path = shorten_folder_name(os.path.join(lesson_folder, f'{clear_folder_name(lesson_title)}.mp4'))
       download_video(video_url, output_path, response_lesson)
+
+  lesson_material(soup, lesson_folder)
+  lesson_text(soup, lesson_folder, lesson_title)
+  
       
 
 def process_lessons(lessons):
@@ -60,7 +89,7 @@ def list_sections(course_name, course_link):
   soup = BeautifulSoup(response.text, 'html.parser')
   sections = soup.find_all('div', class_='section')
 
-  with ThreadPoolExecutor(max_workers=5) as executor:
+  with ThreadPoolExecutor(max_workers=3) as executor:
     main_progress_bar = tqdm(total=len(sections), desc=course_name, leave=True)
     futures = []
 

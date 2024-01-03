@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import re
 
+
 def benedictus_ascii_art():
   benedictus = """
      ___ ___ _  _ ___ ___ ___ ___ _____ _   _ ___ 
@@ -48,6 +49,7 @@ def shorten_folder_name(full_path, max_length=210):
     
   return full_path
 
+
 def format_url(video_url):
   pattern = r'v=([a-zA-Z0-9-]+)'
   match = re.search(pattern, video_url)
@@ -55,6 +57,59 @@ def format_url(video_url):
     extracted_part = match.group(1)
     video_url = f'https://b-vz-5e4594b3-234.tv.pandavideo.com.br/{extracted_part}/playlist.m3u8'
     return video_url
+
+
+def save_html(soup, lesson_folder, lesson_title):
+  content_materials = soup.find('div', class_='content__materials')
+
+  if content_materials:
+    content_materials.decompose()
+  file_path = shorten_folder_name(os.path.join(lesson_folder, clear_folder_name(lesson_title + ".html")))
+
+  if not os.path.exists(file_path):
+    with open(file_path, "w", encoding="utf-8") as file:
+      file.write(str(soup.prettify()))
+
+
+def save_file(file_path, response):
+  if not os.path.exists(file_path):
+    with open(file_path, 'wb') as file:
+      for chunk in response.iter_content(chunk_size=8192):
+        file.write(chunk)
+
+
+def generate_file_name(url, headers, default_name='downloaded_material'):
+  extension_map = {
+    'application/rar': '.rar',
+    'application/zip': '.zip',
+    'application/pdf': '.pdf',
+    'text/html': '.html',
+    'text/csv;charset=UTF-8': '.csv',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  }
+
+  content_type = headers.get('Content-Type', '').split(';')[0]
+  extension = extension_map.get(content_type, '')
+  content_disposition = headers.get('Content-Disposition', '')
+
+  if 'filename=' in content_disposition:
+    filename = re.findall('filename="?([^";]+)"?', content_disposition)
+    if filename:
+      return filename[0]
+        
+  url_file_name = os.path.basename(url).split('?')[0].split('#')[0]
+
+  if url_file_name:
+    return url_file_name
+  
+  return default_name + extension
+
+def save_material(soup, lesson_folder, lesson_title):
+  file_path = os.path.join(lesson_folder, lesson_title + ".html")
+
+  if not os.path.exists(file_path):
+    with open(file_path, "w", encoding="utf-8") as file:
+      file.write(str(soup.prettify()))
 
 
 def log_error(message):
