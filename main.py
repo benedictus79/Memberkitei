@@ -1,9 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
-from login import vazandigitalsession, selected_course, BeautifulSoup
+from login import vazandigitalsession, selected_course, BeautifulSoup, subdomain
 from utils import format_url, generate_file_name, log_error, os, clear_folder_name, create_folder, save_file, save_html, shorten_folder_name
 from download import download_video
 from tqdm import tqdm
-
+from threading import RLock
 
 def extract_section_details(section, index, main_course_folder):
   span_tag = section.find('span', class_='ml-2.5')
@@ -30,7 +30,7 @@ def extract_lesson_details(section, section_folder):
     lesson_title_text = lesson.text.strip()
     lesson_title = f'{i:03d} - {lesson_title_text}' 
     lesson_folder = create_folder(shorten_folder_name(os.path.join(section_folder, clear_folder_name(lesson_title))))
-    lesson_link = f'''https://vazan-conteudo-digital.memberkit.com.br{lesson['href']}'''
+    lesson_link = f'''https://{subdomain}.memberkit.com.br{lesson['href']}'''
     lessons_details[lesson_title_text] = {'url': lesson_link, 'path': lesson_folder}
 
   return lessons_details
@@ -42,7 +42,7 @@ def lesson_material(soup, lesson_folder):
   if target_a:
     for i, target_div in enumerate(target_a, start=1):
       material_href = target_div.get('href')
-      response = vazandigitalsession.get(f'https://vazan-conteudo-digital.memberkit.com.br{material_href}')
+      response = vazandigitalsession.get(f'https://{subdomain}.memberkit.com.br{material_href}')
       if response.status_code != 200:
         msg_warning = f"Erro ao acessar {material_href}: Status Code {response.status_code}"
         log_error(msg_warning)
@@ -74,13 +74,18 @@ def find_and_download_video(lesson_link, lesson_folder, lesson_title):
 
   lesson_material(soup, lesson_folder)
   lesson_text(soup, lesson_folder, lesson_title)
-  
-      
+
+
+def download_lesson(lesson, lesson_info):
+        find_and_download_video(lesson_info['url'], lesson_info['path'], lesson)
+
 
 def process_lessons(lessons):
   if lessons:
-    for lesson, lesson_info in lessons.items():
-      find_and_download_video(lesson_info['url'], lesson_info['path'], lesson)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+      futures = [executor.submit(download_lesson, lesson, lesson_info) for lesson, lesson_info in lessons.items()]
+      for future in futures:
+        future.result()
 
 
 def list_sections(course_name, course_link):
@@ -90,6 +95,7 @@ def list_sections(course_name, course_link):
   sections = soup.find_all('div', class_='section')
 
   with ThreadPoolExecutor(max_workers=3) as executor:
+    tqdm.set_lock(RLock())
     main_progress_bar = tqdm(total=len(sections), desc=course_name, leave=True)
     futures = []
 

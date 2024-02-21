@@ -51,11 +51,12 @@ def shorten_folder_name(full_path, max_length=210):
 
 
 def format_url(video_url):
-  pattern = r'v=([a-zA-Z0-9-]+)'
+  pattern = r'https://player-vz-([a-zA-Z0-9-]+).tv.pandavideo.com.br/embed/\?v=([a-zA-Z0-9-]+)'
   match = re.search(pattern, video_url)
   if match:
-    extracted_part = match.group(1)
-    video_url = f'https://b-vz-5e4594b3-234.tv.pandavideo.com.br/{extracted_part}/playlist.m3u8'
+    subdomain = match.group(1)
+    extracted_part = match.group(2)
+    video_url = f'https://b-vz-{subdomain}.tv.pandavideo.com.br/{extracted_part}/playlist.m3u8'
     return video_url
 
 
@@ -116,6 +117,14 @@ def log_error(message):
   timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   with open('errosdownload.txt', 'a') as file:
     file.write(f"{timestamp} - {message}\n")
+
+
+def extract_subdomain(url):
+  regex = r"https?://([^/]+)\.memberkit\.com\.br"
+  match = re.search(regex, url)
+  if match:
+    subdomain = match.group(1)
+    return subdomain
 
 
 class SilentLogger(object):

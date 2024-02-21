@@ -1,13 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
-from utils import benedictus_ascii_art, clear_screen
+from utils import benedictus_ascii_art, clear_screen, extract_subdomain
 
 
 vazandigitalsession = requests.Session()
 
 
 headers = {
-  'authority': 'vazan-conteudo-digital.memberkit.com.br',
   'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'accept-language': 'pt-BR,pt;q=0.7',
   'cache-control': 'no-cache',
@@ -27,18 +26,21 @@ headers = {
 
 
 def get_authenticity_token():
-  response = vazandigitalsession.get('https://vazan-conteudo-digital.memberkit.com.br/users/sign_in', headers=headers)
+  subdomain = input('Digite a url da pagina: ')
+  subdomain = extract_subdomain(subdomain)
+  headers['authority'] = f'https://{subdomain}.memberkit.com.br/'
+  response = vazandigitalsession.get(f'https://{subdomain}.memberkit.com.br/users/sign_in', headers=headers)
   soup = BeautifulSoup(response.text, 'html.parser')
   token_element = soup.find('input', {'name': 'authenticity_token'})
   if token_element:
     authenticity_token = token_element['value']
-    return authenticity_token
+    return authenticity_token, subdomain
   
 
-def login(authenticity_token):
+def login(authenticity_token, subdomain):
   benedictus_ascii_art()
-  username = input("email: ")
-  password = input("senha: ")
+  username = input('email: ')
+  password = input('senha: ')
   clear_screen()
   data = {
     'user[email]': username,
@@ -48,7 +50,7 @@ def login(authenticity_token):
     'commit': 'Login',
   }
   response = vazandigitalsession.post(
-    'https://vazan-conteudo-digital.memberkit.com.br/users/sign_in',
+    f'https://{subdomain}.memberkit.com.br/users/sign_in',
     headers=headers,
     data=data,
   )
@@ -58,7 +60,7 @@ def login(authenticity_token):
   courses = {}
   if a_tag:
     for course in a_tag:
-      courses[course.text] = f'''https://vazan-conteudo-digital.memberkit.com.br/{course.get('href')}'''
+      courses[course.text] = f'''https://{subdomain}.memberkit.com.br/{course.get('href')}'''
 
     return courses
 
@@ -75,8 +77,6 @@ def choose_course(courses):
   return selected_course_title, selected_course_link
   
 
-token = get_authenticity_token()
-courses = login(token)
+token, subdomain = get_authenticity_token()
+courses = login(token, subdomain)
 selected_course = choose_course(courses)
-
-
