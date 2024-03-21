@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from utils import benedictus_ascii_art, clear_screen, extract_subdomain
+from utils import re, benedictus_ascii_art, clear_screen, extract_subdomain
 
 
 vazandigitalsession = requests.Session()
@@ -55,14 +55,17 @@ def login(authenticity_token, subdomain):
     data=data,
   )
   soup = BeautifulSoup(response.text, 'html.parser')
-  a_tag = soup.find_all('a', class_='text-base font-medium tracking-tight text-inherit')
+  href_pattern = re.compile(r"/\d+-[\w-]+")
+  a_tag = soup.find_all('a', class_=['text-base font-medium tracking-tight text-inherit', 'block'])
 
   courses = {}
-  if a_tag:
-    for course in a_tag:
-      courses[course.text] = f'''https://{subdomain}.memberkit.com.br/{course.get('href')}'''
-
-    return courses
+  for tag in a_tag:
+    href = tag.get('href')
+    if href and href_pattern.match(href):
+        courses[tag.text.strip()] = f'https://{subdomain}.memberkit.com.br{href}'
+    elif a_tag:
+      courses[tag.text] = f'''https://{subdomain}.memberkit.com.br/{tag.get('href')}'''
+  return courses
 
 
 def choose_course(courses):
