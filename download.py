@@ -2,43 +2,32 @@ import yt_dlp
 from utils import SilentLogger, log_error
 
 
-pandavideoheaders = lambda rerefer, optional_origin=None: {
+pandavideoheaders = lambda rerefer: {
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Referer': rerefer,
-  **({'Origin': optional_origin} if optional_origin is not None else {})
 }
 
 
-def verified_retry_download(url, session, ydl_opts):
-  headers = pandavideoheaders(session.url, session.url)
-  ydl_opts['http_headers'] = headers
-  with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    ydl.download([url])
-
-
-def download_video(url, output_name, session):
-  headers = pandavideoheaders(session.url)
+def download_video(url, output_name, session=None):
   ydl_opts = {
-    'format': 'bv+ba/b',
-    'outtmpl': output_name,
+    'format': 'bv[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best',
+    'outtmpl': f'{output_name}.%(ext)s',
     'quiet': True,
     'no_progress': True,
-    'http_headers': headers,
-    'logger': SilentLogger(),
-    'concurrent_fragment_downloads': 7,
+    'logger': SilentLogger(url, f'{output_name}.%(ext)s'),
+    'concurrent_fragment_downloads': 10,
     'fragment_retries': 50,
-    'retry_sleep_functions': {'fragment': 30},
-    'buffersize': 104857600,
-    'retries': 30,
+    'file_access_retries': 50,
+    'retries': 50,
     'continuedl': True,
-    'extractor_retries': 10,
+    'extractor_retries': 50,
+    'trim_file_name': 249,
   }
-
+  if session:
+    headers = pandavideoheaders(session.url)
+    ydl_opts['http_headers'] = headers
   try:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
       ydl.download([url])
   except yt_dlp.utils.DownloadError as e:
-    if '403' in str(e) or '401' in str(e):
-      verified_retry_download(url, session, ydl_opts)
-    log_error(f"Erro ao baixar: {e}")
-    pass
+    log_error(f"Erro ao baixar: {e} ||| {url}")

@@ -1,9 +1,8 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from login import vazandigitalsession, selected_course, BeautifulSoup, subdomain
-from utils import format_url, generate_file_name, log_error, os, clear_folder_name, create_folder, save_file, save_html, shorten_folder_name
+from utils import format_url, generate_file_name, log_error, re, os, clear_folder_name, create_folder, save_file, save_html, shorten_folder_name
 from download import download_video
 from tqdm import tqdm
-from threading import RLock
 
 def extract_section_details(section, index, main_course_folder):
   span_tag = section.find('span', class_='ml-2.5')
@@ -46,10 +45,10 @@ def lesson_material(soup, lesson_folder):
       if response.status_code != 200:
         msg_warning = f"Erro ao acessar {material_href}: Status Code {response.status_code}"
         log_error(msg_warning)
-        return
+        continue
       file_name = generate_file_name(response.url, response.headers)
       material_folder = create_folder(os.path.join(lesson_folder, 'material'))
-      file_path = os.path.join(material_folder, f'{i:03d} - {clear_folder_name(file_name)}')
+      file_path = os.path.join(material_folder, f'{i:03d} - {clear_folder_name(file_name, is_file=True)}')
       save_file(file_path, response)
 
 def lesson_text(soup, lesson_folder, lesson_title):
@@ -66,26 +65,29 @@ def find_and_download_video(lesson_link, lesson_folder, lesson_title):
   target_div = soup.find('div', class_="aspect-h-9 aspect-w-16 relative z-20")
 
   if target_div:
-    video_url = target_div.get('data-panda-player-url-value')
-    if video_url:
-      video_url = format_url(video_url)
-      output_path = shorten_folder_name(os.path.join(lesson_folder, f'{clear_folder_name(lesson_title)}.mp4'))
-      download_video(video_url, output_path, response_lesson)
+    div_html = str(target_div)
+    match = re.search(r'data-panda-player-url-value="([^"]+)"|data-youtube-uid-value="([^"]+)"', div_html)
+    if match:
+      video_url = match.group(1) if match.group(1) else match.group(2)
+      if video_url:
+        video_source = 'PandaVideo' if match.group(1) else 'YouTube'
+        video_url = format_url(video_url, video_source)
+        output_path = os.path.join(lesson_folder, f'{clear_folder_name(lesson_title)}')
+        download_video(video_url, output_path, response_lesson)
 
   lesson_material(soup, lesson_folder)
   lesson_text(soup, lesson_folder, lesson_title)
 
 
 def download_lesson(lesson, lesson_info):
-        find_and_download_video(lesson_info['url'], lesson_info['path'], lesson)
+    find_and_download_video(lesson_info['url'], lesson_info['path'], lesson)
 
 
 def process_lessons(lessons):
   if lessons:
-    with ThreadPoolExecutor(max_workers=3) as executor:
-      futures = [executor.submit(download_lesson, lesson, lesson_info) for lesson, lesson_info in lessons.items()]
-      for future in futures:
-        future.result()
+    for lesson, lesson_info in lessons.items():
+        download_lesson(lesson, lesson_info)
+
 
 
 def list_sections(course_name, course_link):
@@ -95,10 +97,8 @@ def list_sections(course_name, course_link):
   sections = soup.find_all('div', class_='section')
 
   with ThreadPoolExecutor(max_workers=3) as executor:
-    tqdm.set_lock(RLock())
-    main_progress_bar = tqdm(total=len(sections), desc=course_name, leave=True)
     futures = []
-
+    
     for i, section in enumerate(sections, start=1):
       section_folder = extract_section_details(section, i, main_course_folder)
       if section_folder:
@@ -106,11 +106,9 @@ def list_sections(course_name, course_link):
         future = executor.submit(process_lessons, lessons)
         futures.append(future)
 
-    for future in futures:
+    for future in tqdm(as_completed(futures), total=len(futures), desc=course_name, leave=True):
       future.result()
-      main_progress_bar.update(1)
 
-    main_progress_bar.close()
 
 
 if __name__ == '__main__':
