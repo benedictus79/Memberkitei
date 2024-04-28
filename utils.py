@@ -1,6 +1,8 @@
 from datetime import datetime
 import os
+import random
 import re
+from time import sleep
 
 
 def benedictus_ascii_art():
@@ -30,12 +32,11 @@ def create_folder(folder_name):
   return path
 
 
-def clear_folder_name(name):
-  sanitized_base = re.sub(r'[<>:."/\\|?*]', '', name)
-  sanitized_base = re.sub(r'\s+', '', sanitized_base).strip()
-  sanitized_base = re.sub(r'\.$', '', sanitized_base)
-
-  return sanitized_base
+def clear_folder_name(name, is_file=None, ext=''):
+  if is_file:
+    name, ext = os.path.splitext(name)
+  sanitized_base = re.sub(r'[<>:."/\\|?*]|\s+|\.$', ' ', name).strip()
+  return sanitized_base + ext if ext else sanitized_base
 
 
 def shorten_folder_name(full_path, max_length=241):
@@ -47,14 +48,18 @@ def shorten_folder_name(full_path, max_length=241):
   return os.path.join(directory, base_name + extension)
 
 
-def format_url(video_url):
-  pattern = r'https://player-vz-([a-zA-Z0-9-]+).tv.pandavideo.com.br/embed/\?v=([a-zA-Z0-9-]+)'
-  match = re.search(pattern, video_url)
-  if match:
-    subdomain = match.group(1)
-    extracted_part = match.group(2)
-    video_url = f'https://b-vz-{subdomain}.tv.pandavideo.com.br/{extracted_part}/playlist.m3u8'
-    return video_url
+def format_url(video_url, video_source):
+  if video_source == 'PandaVideo':
+    pattern = r'https://player-vz-([a-zA-Z0-9-]+).tv.pandavideo.com.br/embed/\?v=([a-zA-Z0-9-]+)'
+    match = re.search(pattern, video_url)
+    if match:
+      subdomain = match.group(1)
+      extracted_part = match.group(2)
+      video_url = f'https://b-vz-{subdomain}.tv.pandavideo.com.br/{extracted_part}/playlist.m3u8'
+      return video_url
+  if video_source == 'YouTube':
+    return f'https://www.youtube.com/embed/{video_url}'
+
 
 
 def save_html(soup, lesson_folder, lesson_title):
@@ -62,7 +67,7 @@ def save_html(soup, lesson_folder, lesson_title):
 
   if content_materials:
     content_materials.decompose()
-  file_path = shorten_folder_name(os.path.join(lesson_folder, clear_folder_name(lesson_title + ".html")))
+  file_path = shorten_folder_name(os.path.join(lesson_folder, f'{clear_folder_name(lesson_title)}.html'))
 
   if not os.path.exists(file_path):
     with open(file_path, "w", encoding="utf-8") as file:
@@ -125,13 +130,15 @@ def extract_subdomain(url):
 
 
 class SilentLogger(object):
-  def debug(self, msg):
-    pass
+    def __init__(self, url=None, output_path=None):
+        self.url = url
+        self.output_path = output_path
 
-  def warning(self, msg):
-    log_error(msg)
-    pass
+    def debug(self, msg):
+        pass
 
-  def error(self, msg):
-    log_error(msg)
-    pass
+    def warning(self, msg):
+        log_error(f"WARNING: {msg} - URL: {self.url}, Path: {self.output_path}")
+
+    def error(self, msg):
+        log_error(f"ERROR: {msg} - URL: {self.url}, Path: {self.output_path}")
